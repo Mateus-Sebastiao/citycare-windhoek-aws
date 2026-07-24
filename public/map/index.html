@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OneVoice Na — Public Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { background: #0b3d91; color: #fff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 16px; margin: 0; }
+  #legend { display: flex; gap: 14px; font-size: 13px; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #map { height: calc(100vh - 48px); width: 100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OneVoice Na — What's being reported</h1>
+  <div id="legend">
+    <span><i class="dot" style="background:#d92d20"></i>Critical</span>
+    <span><i class="dot" style="background:#e08c00"></i>Medium</span>
+    <span><i class="dot" style="background:#6b7280"></i>Light</span>
+  </div>
+</header>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const COLORS = { CRITICAL: "#d92d20", MEDIUM: "#e08c00", LIGHT: "#6b7280" };
+const map = L.map("map").setView([-22.5700, 17.0836], 12); // Windhoek
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors",
+}).addTo(map);
+
+async function load() {
+  const res = await fetch("/api/v1/reports/public");
+  const reports = await res.json();
+  reports.forEach((r) => {
+    const marker = L.circleMarker([r.latitude, r.longitude], {
+      radius: 8 + Math.min(r.duplicate_count, 10),
+      color: COLORS[r.severity] || "#6b7280",
+      fillColor: COLORS[r.severity] || "#6b7280",
+      fillOpacity: 0.8,
+      weight: 1,
+    }).addTo(map);
+    marker.bindPopup(
+      `<strong>${escapeHtml(r.title)}</strong><br>${escapeHtml(r.category)} — ${r.severity}<br>` +
+      `Status: ${r.status}${r.duplicate_count > 1 ? `<br>${r.duplicate_count} citizens reported this` : ""}`
+    );
+  });
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+load();
+</script>
+</body>
+</html>

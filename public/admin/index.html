@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OneVoice Na — Admin</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f4f5f7; color: #1a1a1a; }
+  header { background: #0b3d91; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header a { color: #cfe0ff; font-size: 13px; margin-left: 14px; }
+  nav { display: flex; gap: 4px; background: #082f70; padding: 0 24px; }
+  nav button { background: none; border: none; color: #cfe0ff; padding: 12px 16px; cursor: pointer; font-size: 14px; border-bottom: 3px solid transparent; }
+  nav button.active { color: #fff; border-bottom-color: #4d9fff; font-weight: 600; }
+  main { padding: 24px; max-width: 1150px; margin: 0 auto; }
+  #login { max-width: 320px; margin: 80px auto; background: #fff; padding: 24px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  #login input { width: 100%; padding: 9px; margin: 6px 0 14px; box-sizing: border-box; }
+  button.primary { background: #0b3d91; color: #fff; border: none; padding: 9px 15px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .filters select { padding: 7px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+  th { background: #fafafa; position: sticky; top: 0; }
+  .sev { font-weight: 600; padding: 2px 9px; border-radius: 12px; font-size: 12px; color: #fff; display: inline-block; }
+  .sev-CRITICAL { background: #d92d20; }
+  .sev-MEDIUM { background: #e08c00; }
+  .sev-LIGHT { background: #6b7280; }
+  .muted { font-size: 12px; color: #6b7280; }
+  .thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; margin-top: 6px; display: block; }
+  .card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 16px; }
+  .card h3 { margin: 0 0 6px; }
+  textarea, input[type=text] { width: 100%; padding: 9px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; margin-bottom: 10px; }
+  .stars { color: #e08c00; }
+  .comment { border-left: 3px solid #eee; padding: 4px 0 4px 12px; margin: 10px 0; }
+  .error { color: #d92d20; font-size: 13px; margin-top: 8px; }
+  .empty { color: #6b7280; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h2>Admin sign in</h2>
+  <label>Username</label>
+  <input id="user" value="admin" />
+  <label>Password</label>
+  <input id="pass" type="password" />
+  <button class="primary" onclick="login()">Sign in</button>
+  <div class="error" id="loginError"></div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>OneVoice Na — Municipal Admin
+      <a href="/map" target="_blank">Public map ↗</a>
+    </h1>
+    <button onclick="logout()" style="background:#fff2;color:#fff;border:1px solid #fff5;padding:6px 12px;border-radius:6px;cursor:pointer">Sign out</button>
+  </header>
+  <nav>
+    <button id="nav-reports" class="active" onclick="switchView('reports')">Reports</button>
+    <button id="nav-laws" onclick="switchView('laws')">Laws & Policies</button>
+    <button id="nav-suggestions" onclick="switchView('suggestions')">Ministry Suggestions</button>
+  </nav>
+  <main id="view"></main>
+</div>
+
+<script>
+const API = "/api/v1";
+let currentView = "reports";
+
+function creds() {
+  return { "X-Admin-User": localStorage.getItem("adminUser") || "", "X-Admin-Password": localStorage.getItem("adminPass") || "" };
+}
+async function authFetch(path, opts = {}) {
+  return fetch(API + path, { ...opts, headers: { ...(opts.headers || {}), ...creds() } });
+}
+
+async function login() {
+  const user = document.getElementById("user").value;
+  const pass = document.getElementById("pass").value;
+  const res = await fetch(API + "/admin/reports", { headers: { "X-Admin-User": user, "X-Admin-Password": pass } });
+  if (!res.ok) { document.getElementById("loginError").textContent = "Invalid credentials."; return; }
+  localStorage.setItem("adminUser", user);
+  localStorage.setItem("adminPass", pass);
+  showApp();
+}
+function logout() { localStorage.removeItem("adminUser"); localStorage.removeItem("adminPass"); location.reload(); }
+function showApp() {
+  document.getElementById("login").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  switchView("reports");
+}
+
+function switchView(view) {
+  currentView = view;
+  ["reports", "laws", "suggestions"].forEach((v) =>
+    document.getElementById("nav-" + v).classList.toggle("active", v === view));
+  if (view === "reports") renderReports();
+  if (view === "laws") renderLaws();
+  if (view === "suggestions") renderSuggestions();
+}
+
+/* ---------- Reports ---------- */
+async function renderReports() {
+  document.getElementById("view").innerHTML = `
+    <div class="filters">
+      <select id="statusFilter" onchange="loadReports()">
+        <option value="">All statuses</option>
+        <option value="RECEIVED">Received</option>
+        <option value="IN_PROGRESS">In progress</option>
+        <option value="RESOLVED">Resolved</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
+      <button class="primary" onclick="loadReports()">Refresh</button>
+      <span class="muted" id="count"></span>
+    </div>
+    <table>
+      <thead><tr><th>Severity</th><th>Report</th><th>Category</th><th>Reporter</th><th>Location</th><th>Reported</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>`;
+  loadReports();
+}
+async function loadReports() {
+  const status = document.getElementById("statusFilter").value;
+  const res = await authFetch("/admin/reports" + (status ? `?status=${status}` : ""));
+  if (!res.ok) return logout();
+  const rows = await res.json();
+  document.getElementById("count").textContent = `${rows.length} report(s)`;
+  document.getElementById("rows").innerHTML = rows.map(reportRow).join("") || `<tr><td colspan="7" class="empty">No reports.</td></tr>`;
+}
+function reportRow(r) {
+  const dup = r.duplicate_count > 1 ? `<div class="muted">👥 ${r.duplicate_count} citizens reported this</div>` : "";
+  const img = r.image_path ? `<img class="thumb" src="${r.image_path}" alt="" />` : "";
+  const ai = r.ai_summary ? `<div class="muted">🤖 ${escapeHtml(r.ai_summary)}</div>` : "";
+  return `<tr>
+      <td><span class="sev sev-${r.severity_final}">${r.severity_final}</span>${ai}</td>
+      <td><strong>${escapeHtml(r.title)}</strong><div class="muted">${escapeHtml(r.description)}</div>${dup}${img}</td>
+      <td>${escapeHtml(r.category)}</td>
+      <td>${escapeHtml(r.reporter_name || "—")}<div class="muted">${escapeHtml(r.reporter_phone || "")}</div></td>
+      <td>${escapeHtml(r.address_text || "")}${r.latitude ? `<div class="muted">${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}</div>` : ""}</td>
+      <td class="muted">${new Date(r.created_at).toLocaleString()}</td>
+      <td><select onchange="updateStatus('${r.id}', this.value)">
+        ${["RECEIVED","IN_PROGRESS","RESOLVED","REJECTED"].map(s => `<option value="${s}" ${s===r.status?"selected":""}>${s}</option>`).join("")}
+      </select></td>
+    </tr>`;
+}
+async function updateStatus(id, status) {
+  await authFetch(`/admin/reports/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  loadReports();
+}
+
+/* ---------- Laws & Policies ---------- */
+async function renderLaws() {
+  const res = await fetch(API + "/laws");
+  const laws = await res.json();
+  document.getElementById("view").innerHTML = `
+    <div class="card">
+      <h3>Publish a new law or policy</h3>
+      <input type="text" id="lawTitle" placeholder="Title" />
+      <textarea id="lawSummary" rows="3" placeholder="Summary shown to citizens"></textarea>
+      <button class="primary" onclick="publishLaw()">Publish for public commentary</button>
+      <div class="error" id="lawError"></div>
+    </div>
+    <div id="lawList">${laws.map(lawCard).join("") || `<div class="empty">No laws published.</div>`}</div>`;
+  laws.forEach((l) => loadComments(l.id));
+}
+function lawCard(l) {
+  return `<div class="card">
+      <h3>${escapeHtml(l.title)}</h3>
+      <div class="muted">Published ${new Date(l.published_at).toLocaleDateString()}</div>
+      <p>${escapeHtml(l.summary)}</p>
+      <strong>Citizen feedback</strong>
+      <div id="comments-${l.id}"><span class="muted">Loading…</span></div>
+    </div>`;
+}
+async function loadComments(lawId) {
+  const res = await authFetch(`/admin/laws/${lawId}/comments`);
+  const comments = await res.json();
+  const el = document.getElementById("comments-" + lawId);
+  if (!el) return;
+  const avg = comments.filter(c => c.rating).reduce((a, c, _, arr) => a + c.rating / arr.length, 0);
+  const header = comments.length
+    ? `<div class="muted">${comments.length} comment(s)${avg ? ` · avg rating ${avg.toFixed(1)}★` : ""}</div>` : "";
+  el.innerHTML = header + (comments.map(c => `
+      <div class="comment">
+        ${c.rating ? `<span class="stars">${"★".repeat(c.rating)}${"☆".repeat(5 - c.rating)}</span> ` : ""}
+        <strong>${escapeHtml(c.commenter_name || "Anonymous")}</strong>
+        <div>${escapeHtml(c.comment_text)}</div>
+        <div class="muted">${new Date(c.created_at).toLocaleString()}</div>
+      </div>`).join("") || `<div class="muted">No feedback yet.</div>`);
+}
+async function publishLaw() {
+  const title = document.getElementById("lawTitle").value.trim();
+  const summary = document.getElementById("lawSummary").value.trim();
+  if (!title || !summary) { document.getElementById("lawError").textContent = "Title and summary are required."; return; }
+  const res = await authFetch("/admin/laws", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, summary }) });
+  if (res.ok) renderLaws();
+}
+
+/* ---------- Ministry Suggestions ---------- */
+async function renderSuggestions() {
+  const [mres, sres] = await Promise.all([fetch(API + "/ministries"), authFetch("/admin/suggestions")]);
+  const ministries = await mres.json();
+  const suggestions = await sres.json();
+  const nameById = Object.fromEntries(ministries.map(m => [m.id, m.name]));
+  document.getElementById("view").innerHTML = `
+    <div class="filters">
+      <select id="minFilter" onchange="filterSuggestions()">
+        <option value="">All ministries</option>
+        ${ministries.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
+      </select>
+      <span class="muted">${suggestions.length} suggestion(s)</span>
+    </div>
+    <div id="sugList"></div>`;
+  window._suggestions = suggestions;
+  window._nameById = nameById;
+  filterSuggestions();
+}
+function filterSuggestions() {
+  const min = document.getElementById("minFilter").value;
+  const list = window._suggestions.filter(s => !min || s.ministry_id === min);
+  document.getElementById("sugList").innerHTML = list.map(s => `
+      <div class="card">
+        <div class="muted">${escapeHtml(window._nameById[s.ministry_id] || "")} · ${new Date(s.created_at).toLocaleString()}</div>
+        <h3>${escapeHtml(s.subject)}</h3>
+        <p>${escapeHtml(s.content)}</p>
+        <div class="muted">From ${escapeHtml(s.reporter_name || "Anonymous")} ${s.reporter_phone ? "· " + escapeHtml(s.reporter_phone) : ""}
+          ${s.attachment_path ? `· <a href="${s.attachment_path}" target="_blank">attachment ↗</a>` : ""}</div>
+      </div>`).join("") || `<div class="empty">No suggestions.</div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+if (localStorage.getItem("adminUser")) showApp();
+</script>
+</body>
+</html>
