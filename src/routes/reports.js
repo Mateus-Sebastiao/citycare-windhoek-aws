@@ -59,4 +59,13 @@ router.get("/reports/:id", (req, res) => {
   res.json(row);
 });
 
+router.delete("/reports/resolved", async (req, res) => {
+  try {
+    const result = db.prepare("DELETE FROM reports WHERE status = 'RESOLVED'").run();
+    res.json({ success: true, deletedCount: result.changes });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete resolved reports" });
+  }
+});
+
 module.exports = router;

@@ -36,6 +36,67 @@
   .comment { border-left: 3px solid #eee; padding: 4px 0 4px 12px; margin: 10px 0; }
   .error { color: #d92d20; font-size: 13px; margin-top: 8px; }
   .empty { color: #6b7280; padding: 30px; text-align: center; }
+
+  /* Estilos para o Modal de Imagem */
+  .modal-overlay {
+    display: none; 
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+    background-color: #fff;
+    padding: 8px;
+    border-radius: 6px;
+    box-shadow: 0 4px 25px rgba(0,0,0,0.5);
+  }
+
+  .modal-content img {
+    width: 100%;
+    height: auto;
+    max-height: 80vh;
+    object-fit: contain;
+    display: block;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    color: #fff;
+    font-size: 26px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #000;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+
+  .modal-close:hover {
+    background: #444;
+  }
+
+  /* Feedback visual de clique na tabela */
+  .thumb:hover {
+    opacity: 0.85;
+    transform: scale(1.03);
+    transition: all 0.2s ease-in-out;
+  }
 </style>
 </head>
 <body>
@@ -118,9 +179,18 @@ async function renderReports() {
     <table>
       <thead><tr><th>Severity</th><th>Report</th><th>Category</th><th>Reporter</th><th>Location</th><th>Reported</th><th>Status</th></tr></thead>
       <tbody id="rows"></tbody>
-    </table>`;
+    </table>
+    
+    <!-- Modal de Visualização da Imagem -->
+    <div id="imageModal" class="modal-overlay" onclick="closeImageModal()">
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <span class="modal-close" onclick="closeImageModal()">&times;</span>
+        <img id="modalTargetImage" src="" alt="Report Attachment" />
+      </div>
+    </div>`;
   loadReports();
 }
+
 async function loadReports() {
   const status = document.getElementById("statusFilter").value;
   const res = await authFetch("/admin/reports" + (status ? `?status=${status}` : ""));
@@ -129,10 +199,14 @@ async function loadReports() {
   document.getElementById("count").textContent = `${rows.length} report(s)`;
   document.getElementById("rows").innerHTML = rows.map(reportRow).join("") || `<tr><td colspan="7" class="empty">No reports.</td></tr>`;
 }
+
 function reportRow(r) {
   const dup = r.duplicate_count > 1 ? `<div class="muted">👥 ${r.duplicate_count} citizens reported this</div>` : "";
-  const img = r.image_path ? `<img class="thumb" src="${r.image_path}" alt="" />` : "";
+  
+  const img = r.image_path ? `<img class="thumb" src="${r.image_path}" alt="" onclick="openImageModal('${r.image_path}')" style="cursor: pointer;" />` : "";
+  
   const ai = r.ai_summary ? `<div class="muted">🤖 ${escapeHtml(r.ai_summary)}</div>` : "";
+  
   return `<tr>
       <td><span class="sev sev-${r.severity_final}">${r.severity_final}</span>${ai}</td>
       <td><strong>${escapeHtml(r.title)}</strong><div class="muted">${escapeHtml(r.description)}</div>${dup}${img}</td>
@@ -145,9 +219,33 @@ function reportRow(r) {
       </select></td>
     </tr>`;
 }
+
 async function updateStatus(id, status) {
   await authFetch(`/admin/reports/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
   loadReports();
+}
+
+async function deleteResolvedReports() {
+  if (!confirm("Are you sure you want to permanently delete all RESOLVED reports?")) return;
+  
+  const res = await authFetch("/admin/reports/resolved", { method: "DELETE" });
+  if (res.ok) {
+    loadReports();
+  } else {
+    alert("Failed to delete resolved reports.");
+  }
+}
+
+function openImageModal(src) {
+  const modal = document.getElementById("imageModal");
+  const modalImg = document.getElementById("modalTargetImage");
+  modalImg.src = src;
+  modal.style.display = "flex";
+}
+
+function closeImageModal() {
+  const modal = document.getElementById("imageModal");
+  modal.style.display = "none";
 }
 
 /* ---------- Laws & Policies ---------- */
