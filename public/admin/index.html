@@ -200,35 +200,54 @@ async function publishLaw() {
 
 /* ---------- Ministry Suggestions ---------- */
 async function renderSuggestions() {
-  const [mres, sres] = await Promise.all([fetch(API + "/ministries"), authFetch("/admin/suggestions")]);
-  const ministries = await mres.json();
-  const suggestions = await sres.json();
-  const nameById = Object.fromEntries(ministries.map(m => [m.id, m.name]));
-  document.getElementById("view").innerHTML = `
-    <div class="filters">
-      <select id="minFilter" onchange="filterSuggestions()">
-        <option value="">All ministries</option>
-        ${ministries.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
-      </select>
-      <span class="muted">${suggestions.length} suggestion(s)</span>
-    </div>
-    <div id="sugList"></div>`;
-  window._suggestions = suggestions;
-  window._nameById = nameById;
-  filterSuggestions();
+  try {
+    const [mres, sres] = await Promise.all([
+      fetch(API + "/ministries").catch(() => ({ json: () => [] })), 
+      authFetch("/admin/suggestions").catch(() => ({ json: () => [] }))
+    ]);
+    
+    const ministries = await mres.json() || [];
+    const suggestions = await sres.json() || [];
+    const nameById = Object.fromEntries(ministries.map(m => [m.id, m.name]));
+    
+    document.getElementById("view").innerHTML = `
+      <div class="filters">
+        <select id="minFilter" onchange="filterSuggestions()">
+          <option value="">All ministries</option>
+          ${ministries.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("")}
+        </select>
+        <span class="muted">${suggestions.length} suggestion(s)</span>
+      </div>
+      <div id="sugList"></div>`;
+      
+    window._suggestions = suggestions;
+    window._nameById = nameById;
+    filterSuggestions();
+  } catch (err) {
+    document.getElementById("view").innerHTML = `<div class="empty">Error loading data.</div>`;
+  }
 }
+
 function filterSuggestions() {
   const min = document.getElementById("minFilter").value;
-  const list = window._suggestions.filter(s => !min || s.ministry_id === min);
-  document.getElementById("sugList").innerHTML = list.map(s => `
+  const list = (window._suggestions || []).filter(s => !min || s.ministry_id === min);
+  
+  document.getElementById("sugList").innerHTML = list.map(s => {
+    // 💡 FORÇA BRUTA: Se não achar o nome do ministério, põe um texto padrão e NÃO DEIXA quebrar a lista
+    const ministryLabel = (window._nameById && window._nameById[s.ministry_id]) 
+      || `Ministry / Department (${s.ministry_id || 'General'})`;
+    
+    return `
       <div class="card">
-        <div class="muted">${escapeHtml(window._nameById[s.ministry_id] || "")} · ${new Date(s.created_at).toLocaleString()}</div>
-        <h3>${escapeHtml(s.subject)}</h3>
-        <p>${escapeHtml(s.content)}</p>
+        <div class="muted">${escapeHtml(ministryLabel)} · ${s.created_at ? new Date(s.created_at).toLocaleString() : ''}</div>
+        <h3>${escapeHtml(s.subject || "No Subject")}</h3>
+        <p>${escapeHtml(s.content || "No Content")}</p>
         <div class="muted">From ${escapeHtml(s.reporter_name || "Anonymous")} ${s.reporter_phone ? "· " + escapeHtml(s.reporter_phone) : ""}
           ${s.attachment_path ? `· <a href="${s.attachment_path}" target="_blank">attachment ↗</a>` : ""}</div>
-      </div>`).join("") || `<div class="empty">No suggestions.</div>`;
+      </div>`;
+  }).join("") || `<div class="empty">No suggestions.</div>`;
 }
+
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

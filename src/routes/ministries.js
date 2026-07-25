@@ -6,6 +6,32 @@ const db = require("../db");
 
 const router = express.Router();
 
+// ⚡ AUTO-SEED: Fixed with required 'code' columns included
+try {
+  const countObj = db.prepare("SELECT COUNT(*) as count FROM ministries").get();
+  if (!countObj || countObj.count === 0) {
+    const defaultMinistries = [
+      { id: 'min-01', name: 'Ministry of Finance & Economy', code: 'FIN' },
+      { id: 'min-02', name: 'Ministry of Health & Public Services', code: 'HLTH' },
+      { id: 'min-03', name: 'Ministry of Infrastructure & Transport', code: 'INFRA' },
+      { id: 'min-04', name: 'General / Catch-All Inquiries', code: 'GEN' }
+    ];
+
+    // Added code column to the INSERT script
+    const insertStmt = db.prepare("INSERT INTO ministries (id, name, code, is_active) VALUES (?, ?, ?, 1)");
+    
+    db.transaction(() => {
+      for (const min of defaultMinistries) {
+        insertStmt.run(min.id, min.name, min.code);
+      }
+    })();
+    console.log("🚀 Database Success: Default ministries seeded successfully.");
+  }
+} catch (err) {
+  console.error("⚠️ Database Warning: Could not auto-seed ministries table.", err.message);
+}
+
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: process.env.UPLOAD_DIR || "./uploads",
